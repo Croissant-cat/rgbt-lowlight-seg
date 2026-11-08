@@ -707,12 +707,11 @@ def build_repro(doc):
     p.paragraph_format.space_after = Pt(6)
     r = p.add_run("仓库地址：")
     set_cn(r, CN_BODY, EN_BODY, BODY_PT, bold=True)
-    r = p.add_run("https://github.com/<你的 GitHub 用户名>/rgbt-lowlight-seg")
+    r = p.add_run("https://github.com/Croissant-cat/rgbt-lowlight-seg")
     set_cn(r, CN_BODY, EN_BODY, BODY_PT)
     r.font.color.rgb = RGBColor(0x1F, 0x4E, 0x79)
     r.font.underline = True
-    para(doc, "（推送方式：cd rgbt-lowlight-seg → git remote add origin <仓库地址> → "
-              "git push -u origin master。）", indent=False, size=9)
+    para(doc, "（仓库已公开，可直接访问或 git clone。）", indent=False, size=9)
     para(doc, "仓库是完全自包含的：12 组数据、全部结果 CSV 与插图都在里面，无需任何外部依赖"
               "（除 pip 可装的 NumPy/SciPy/OpenCV/Matplotlib）。目录结构：")
     code_block(doc,
