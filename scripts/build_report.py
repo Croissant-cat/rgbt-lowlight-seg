@@ -464,10 +464,33 @@ def build_problem(doc):
     para(doc, "β²=0.3 是显著性/小目标检测的惯例（更看重查准率），与多模态分割基准一致。"
               "IoU 是主指标，Fβ 反映查准与查全的折中，MAE 反映逐像素的置信度偏差。")
 
-    heading(doc, "2.2  数据与评测协议", 2)
-    para(doc, "12 组帧的真值面积从 0.29% 到 5.96%，中位数约 1%，属于典型的小目标。"
-              "所有方法在同一批帧、同一阈值（0.5）下评测；为公平起见，经典方法统一经过同一套"
-              "形态学后处理（3×3 开运算 + 9×9 闭运算 + 去除面积小于 0.05% 的连通域）。")
+    heading(doc, "2.2  数据描述：数据是什么", 2)
+    para(doc, "实验数据是 12 组低照度室内场景的 RGB-T 帧，每组包含三件套：可见光图像、同一时刻的"
+              "热红外图像、以及人工标注的像素级真值掩码。三者已经配准、分辨率一致（640×480）。"
+              "数据取自公开的多模态分割基准 VDT-2048，选它的原因是它同时满足本实验的三个前提："
+              "（1）光照极低，可见光图像接近全黑；（2）目标面积占比小（0.29%~5.96%，中位数约 1%），"
+              "属于小目标；（3）提供逐像素真值，可以定量评测而不是靠肉眼判断。")
+    para(doc, "表 2-1 列出了 12 组帧的基本情况。可以看到面积跨度接近 20 倍，"
+              "既有多数帧的“极小目标”（<1%），也有 1001、1734、973 这样接近 5% 的较大目标，"
+              "因此平均值不会被某一类样本单独主导。")
+    para(doc, "所有方法在同一批帧、同一阈值（0.5）下评测；为公平起见，经典方法统一经过同一套"
+              "形态学后处理（3×3 开运算 + 9×9 闭运算 + 去除面积小于 0.05% 的连通域）。"
+              "热红外图像是单通道数据，实验中统一复制成三通道，以便与可见光走同一条融合与分割代码。")
+
+    heading(doc, "2.3  评测协议与实验配置", 2)
+    frame = (oracle.drop_duplicates("image")
+                   .assign(image=lambda d: d.image.astype(str))
+                   .sort_values("gt_area", ascending=False))
+    pairs = [(r.image, f"{r.gt_area*100:.2f}%") for r in frame.itertuples()]
+    half = (len(pairs) + 1) // 2
+    rows = []
+    for i in range(half):
+        a = pairs[i]
+        b = pairs[i + half] if i + half < len(pairs) else ("", "")
+        rows.append([a[0], a[1], b[0], b[1]])
+    add_table(doc, ["帧编号", "真值面积", "帧编号", "真值面积"], rows,
+              "表 2-1  12 组评测帧的真值面积（按面积降序）",
+              widths=[3.4, 3.4, 3.4, 3.4], size=9)
     add_table(doc, ["项目", "数值 / 说明"],
               [["帧数", "12（640×480，RGB + 热红外 + 真值）"],
                ["真值面积", "0.29% ~ 5.96%，中位数约 1%"],
@@ -476,7 +499,7 @@ def build_problem(doc):
                ["分割算子", "Otsu / 三角形阈值 / 自适应阈值 / K-means / 区域生长 / GrabCut"],
                ["组合总数", "4 增强 × 4 融合 × 6 分割 = 96 组，× 12 帧 = 1152 次评测"],
                ["运行环境", "Python 3.12，NumPy/SciPy/OpenCV，CPU（无 GPU）"]],
-              "表 2-1  实验配置", widths=[3.2, 11.0], size=9)
+              "表 2-2  实验配置", widths=[3.2, 11.0], size=9)
     para(doc, "为了让实验规模可控又不失代表性，主网格使用 4 种增强 × 4 种融合 × 6 种分割；"
               "全局直方图均衡、PCA 融合、取最大值等其余算子在同一脚本中可用"
               "（`ENHANCERS` / `FUSIONS`）并出现在图 3-1、图 3-2 的定性对比里。")
@@ -485,10 +508,13 @@ def build_problem(doc):
 
 
 def build_method(doc):
-    heading(doc, "3  实验方法：是怎么做的", 1)
+    heading(doc, "3  代码实现：我写了什么", 1)
     para(doc, "整条流水线是“增强 → 融合 → 分割 → 形态学后处理”，每一环都实现了多个可替换算子，"
-              "以便做因子拆解。4.2 节再叠加三种“给先验”的强基线。下面按环节说明，"
-              "代码见 `src/ipen/`。")
+              "以便做因子拆解。4.2 节再叠加三种“给先验”的强基线。下面按环节说明算法，"
+              "最后在 3.5 节列出全部代码文件与各自职责。")
+    para(doc, "需要说明的是，本实验没有在别人的代码上改，全部算法是从零写的（只有 CLAHE 和 "
+              "GrabCut 直接调用 OpenCV 的现成实现作为工业参照）。代码分三层：`src/ipen/` 是算法库，"
+              "`scripts/` 是跑实验与出图的脚本，`tests/` 是单元测试；三者加起来约 2000 行 Python。")
 
     heading(doc, "3.1  低照度增强", 2)
     bullet(doc, "Gamma 校正：I′ = I^γ（逐像素幂运算），γ<1 抬升暗部；本文取 γ=0.45，"
@@ -535,6 +561,34 @@ def build_method(doc):
               "任何真实的阈值选择都不可能超过它。")
     para(doc, "这两件工具的作用不同：先验阶梯回答“多给信息能提升多少”，"
               "最优阈值上界回答“不换算子只调阈值能提升多少”。两者结合，才能判定瓶颈到底在哪。")
+
+
+def build_code(doc):
+    heading(doc, "3.5  代码结构与改动说明", 2)
+    para(doc, "表 3-1 是仓库里每个文件的职责。之所以拆成这么多文件而不是写一个大脚本，"
+              "是因为要做 96 组因子组合的穷举：把增强、融合、分割各自做成可替换的函数，"
+              "主循环里就能直接做笛卡尔积，加一个新算子只要改一行。")
+    add_table(doc, ["文件", "职责", "主要函数 / 类"],
+              [["src/ipen/data.py", "加载 12 组 RGB / 热红外 / GT，统一成 480×640", "load_frames"],
+               ["src/ipen/enhance.py", "5 种低照度增强", "gamma / hist_eq / clahe / msr / gray_world"],
+               ["src/ipen/fuse.py", "6 种融合 + 灰度化", "fuse / to_gray / laplacian_pyramid"],
+               ["src/ipen/segment.py", "6 种分割算子 + 顶帽 + 后处理", "otsu / triangle / adaptive / kmeans / region_grow / grabcut / tophat"],
+               ["src/ipen/baselines.py", "给先验的强基线（4.2 节用）", "grabcut_gtbox / area_oracle / vote_ensemble"],
+               ["src/ipen/metrics.py", "三项指标", "iou / fbeta / mae / evaluate"],
+               ["scripts/run_experiments.py", "跑完四个实验块，写出 4 个 CSV", "run_grid / run_oracle / run_strong / run_degrade"],
+               ["scripts/make_figures.py", "生成全部插图", "fig_cases / fig_factors / fig_prior_ladder …"],
+               ["scripts/build_report.py", "由 CSV 生成这份报告", "build_front / build_results …"],
+               ["demo.py", "单张图的分割演示（命令行）", "main"],
+               ["tests/test_core.py", "8 项单元测试", "test_metrics_identity_and_bounds …"]],
+              "表 3-1  代码文件与职责", widths=[4.2, 4.6, 6.4], size=8)
+    para(doc, "过程中改动比较大的三处，写在这里备查：")
+    bullet(doc, "融合函数一开始对“拉普拉斯金字塔”返回二维灰度图，而调用方按三通道处理，"
+                "导致形状变成 (1,480) 后广播失败。改法是在 `fuse()` 出口统一转成三通道，"
+                "并让 `to_gray()` 同时兼容 2D 与 3D 输入。")
+    bullet(doc, "GrabCut 单帧要 800 ms，96 组组合跑一遍要十几分钟。改成在 1/2 分辨率上求解、"
+                "再用最近邻上采样回原尺寸，单帧降到 170 ms，精度几乎不变。")
+    bullet(doc, "多尺度 Retinex 最初用 numpy 逐尺度做高斯卷积，单帧 1.9 s；换成 "
+                "`cv2.GaussianBlur` 后降到 0.6 s，这是全流程能压到 2 分钟的关键改动。")
 
 
 def build_results(doc):
@@ -747,14 +801,14 @@ def build_repro(doc):
 
 
 def build_appendix(doc):
-    heading(doc, "附录 A  与作业模板的对应关系", 1)
-    add_table(doc, ["模板要求", "对应章节", "主要产出"],
-              [["1. Github 链接", "第 7 章", "仓库结构、依赖、复现命令、数据说明"],
-               ["2. 实验内容：我要做什么", "第 1、2 章", "问题定义、三个指标、数据与协议"],
-               ["3. 实验方法：是怎么做的", "第 3 章", "6 增强 + 4 融合 + 6 分割 + 两级上界分析"],
-               ["4. 实验结果：结果是什么", "第 4 章", "表 4-1~4-5、图 4-1~4-3"],
-               ["5. 对比：效果有什么变化", "第 5 章", "增强为何有害、热红外为何不够、能力边界"]],
-              "表 A-1  章节与模板要求的对应", widths=[4.3, 3.0, 7.0], size=9)
+    heading(doc, "附录 A  与作业要求的对应关系", 1)
+    add_table(doc, ["作业要求", "对应章节", "主要产出"],
+              [["1. Github 链接", "第 7 章", "仓库地址、目录结构、依赖、复现命令"],
+               ["2. 任务描述：你要做什么", "第 1 章、2.1 节", "背景、三个研究问题、问题定义与三项指标"],
+               ["3. 数据描述：数据是什么", "2.2 节", "12 组 RGB-T 帧、来源 VDT-2048、面积分布、选取理由"],
+               ["4. 代码修改描述：你改了什么", "第 3 章", "6 增强 + 4 融合 + 6 分割 + 后处理，表 3-1 逐文件职责"],
+               ["5. 结果对比：结果有什么变化", "第 4、5 章", "表 4-1~4-5、图 4-1~4-3、先验阶梯与压暗实验"]],
+              "表 A-1  章节与作业要求的对应", widths=[4.6, 3.0, 6.8], size=9)
     heading(doc, "附录 B  单元测试", 1)
     para(doc, "仓库包含 8 项单元测试（tests/test_core.py），覆盖：数据完整性、各增强算子是否"
               "保持形状与取值范围、融合是否输出三通道且数值有限、灰度化的 2D/3D 兼容、"
@@ -820,6 +874,7 @@ def main() -> int:
     build_intro(doc)
     build_problem(doc)
     build_method(doc)
+    build_code(doc)
     build_results(doc)
     build_analysis(doc)
     build_conclusion(doc)
