@@ -1,0 +1,7 @@
+﻿__pycache__/
+*.pyc
+.work/
+*.log
+.patch*.py
+.dbg*.py
+results/*.npy
