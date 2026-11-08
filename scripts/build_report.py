@@ -127,6 +127,7 @@ def caption(doc: Document, text: str, space_before: int = 4, space_after: int = 
     pf.space_before = Pt(space_before)
     pf.space_after = Pt(space_after)
     pf.keep_with_next = keep_next
+    pf.keep_together = True
     pf.line_spacing_rule = WD_LINE_SPACING.SINGLE
     r = p.add_run(text)
     set_cn(r, CN_BODY, EN_BODY, 9)
@@ -149,7 +150,7 @@ def add_table(doc: Document, header: list[str], rows: list[list[str]],
               align_right_from: int = 1, note: str = "",
               highlight: dict[int, str] | None = None,
               group_rows: list[int] | None = None):
-    caption(doc, cap, space_before=10, space_after=4, keep_next=True)
+    caption(doc, cap, space_before=8, space_after=3, keep_next=True)
     table = doc.add_table(rows=len(rows) + 1, cols=len(header))
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     table.autofit = False
@@ -216,10 +217,11 @@ def add_table(doc: Document, header: list[str], rows: list[list[str]],
             for par in merged.paragraphs:
                 par.alignment = WD_ALIGN_PARAGRAPH.CENTER
             start += n
-    for row in table.rows:
+    for i, row in enumerate(table.rows):
         trPr = row._tr.get_or_add_trPr()
-        cant = OxmlElement("w:cantSplit")
-        trPr.append(cant)
+        trPr.append(OxmlElement("w:cantSplit"))
+        if i == 0:                      # repeat the header when the table splits
+            trPr.append(OxmlElement("w:tblHeader"))
     if len(rows) <= 6:                    # short tables stay on one page
         for row in table.rows[:-1]:
             for cell in row.cells:
@@ -234,7 +236,7 @@ def add_table(doc: Document, header: list[str], rows: list[list[str]],
         set_cn(r, CN_BODY, EN_BODY, 8)
         r.italic = True
     else:
-        doc.add_paragraph().paragraph_format.space_after = Pt(6)
+        doc.add_paragraph().paragraph_format.space_after = Pt(2)
 
 
 _EQ_CACHE = Path(tempfile.gettempdir()) / "ipinp_eq"
@@ -479,8 +481,7 @@ def build_problem(doc):
               "全局直方图均衡、PCA 融合、取最大值等其余算子在同一脚本中可用"
               "（`ENHANCERS` / `FUSIONS`）并出现在图 3-1、图 3-2 的定性对比里。")
     add_figure(doc, FIGS / "fig_cases.png",
-               "图 2-1  三组典型帧：可见光几乎无信息，热红外给出目标轮廓；"
-               "最后一列是“给真值框 + GrabCut”的结果")
+               "图 2-1  三组典型帧：可见光几乎无信息，热红外给出目标轮廓（末列为 GT 框 + GrabCut）")
 
 
 def build_method(doc):
@@ -490,7 +491,8 @@ def build_method(doc):
               "代码见 `src/ipen/`。")
 
     heading(doc, "3.1  低照度增强", 2)
-    bullet(doc, "Gamma 校正：I' = I^{1/γ}，γ<1 抬升暗部，本文取 γ=0.45（典型的低照度设置）。")
+    bullet(doc, "Gamma 校正：I′ = I^γ（逐像素幂运算），γ<1 抬升暗部；本文取 γ=0.45，"
+                "即把每个像素值开 0.45 次幂（等价于提亮 2.2 次方根）。")
     bullet(doc, "全局直方图均衡：对亮度通道统计 CDF 并做灰度映射，再把增益等比作用回三通道，避免色偏。")
     bullet(doc, "CLAHE：在 LAB 空间对 L 通道做限制对比度的分块均衡，用 OpenCV 实现作为工业参照。")
     bullet(doc, "多尺度 Retinex：把图像看作“照度 × 反射率”，在对数域减去多尺度高斯模糊，"
@@ -731,7 +733,7 @@ def build_repro(doc):
                "│   └── build_report.py       # 由结果生成本报告\n"
                "├── data/cases/               # 12 组 RGB/热红外/GT\n"
                "└── results/                  # 四个 CSV + 插图")
-    para(doc, "复现全部实验（CPU，约 4 分钟）：")
+    para(doc, "复现全部实验（CPU，约 2 分钟）：")
     code_block(doc,
                "pip install -r requirements.txt\n"
                "python scripts/run_experiments.py    # 生成 grid/oracle/strong/degrade 四个 CSV\n"
